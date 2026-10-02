@@ -1,0 +1,119 @@
+spring:
+  application:
+    name: credit-processing-system
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/credit_db
+    username: credit_user
+    password: credit_pass
+    pool:
+      enabled: true
+      initial-size: 10
+      max-size: 50
+      max-idle-time: 30m
+      validation-query: SELECT 1
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: credit-processing-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+  redis:
+    redisson:
+      file: classpath:redisson-config.yml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,circuitbreakers,retries,kafka
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    retries:
+      enabled: true
+
+server:
+  port: 8080
+  netty:
+    connection-timeout: 2s
+    idle-timeout: 15s
+    threads:
+      acceptor: 4
+      worker: 20
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      creditProcessing:
+        registerHealthIndicator: true
+        slidingWindowType: TIME_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 5s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+        recordExceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+      antiFraud:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        permittedNumberOfCallsInHalfOpenState: 2
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 60
+        recordExceptions:
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+  retry:
+    instances:
+      coreBanking:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.web.reactive.function.client.WebClientResponseException$InternalServerError
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+      antiFraud:
+        maxAttempts: 2
+        waitDuration: 300ms
+        retryExceptions:
+          - java.util.concurrent.TimeoutException
+  timelimiter:
+    instances:
+      coreBanking:
+        timeoutDuration: 2s
+      antiFraud:
+        timeoutDuration: 1s
+
+logging:
+  level:
+    root: INFO
+    com.bank.credit: DEBUG
+    org.springframework.web: INFO
+    org.springframework.r2dbc: DEBUG
+    io.r2dbc.postgresql.QUERY: DEBUG
+    io.r2dbc.postgresql.PARAM: DEBUG
+    org.springframework.kafka: INFO
+    reactor.netty.http.client: DEBUG
