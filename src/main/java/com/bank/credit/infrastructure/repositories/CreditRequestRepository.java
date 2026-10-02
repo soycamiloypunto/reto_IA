@@ -1,7 +1,7 @@
 package com.bank.credit.infrastructure.repositories;
 
 import com.bank.credit.domain.models.CreditRequest;
-import com.bank.credit.domain.models.CreditRequest.CreditRequestStatus;
+import com.bank.credit.domain.models.CreditRequestStatus;
 import org.springframework.data.r2dbc.repository.Modifying;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
@@ -72,7 +72,7 @@ public interface CreditRequestRepository extends ReactiveCrudRepository<CreditRe
      * @param status estado de las solicitudes
      * @return Flux con las solicitudes que coinciden
      */
-    Flux<CreditRequest> findByAmountBetweenAndStatus(BigDecimal minAmount,
+    Flux<CreditRequest> findByRequestedAmountBetweenAndStatus(BigDecimal minAmount,
                                                        BigDecimal maxAmount,
                                                        CreditRequestStatus status);
 

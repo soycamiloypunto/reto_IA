@@ -2,7 +2,7 @@ package com.bank.credit.infrastructure.controllers;
 
 import com.bank.credit.application.usecases.ProcessCreditRequestUseCase;
 import com.bank.credit.domain.models.CreditRequest;
-import com.bank.credit.domain.models.CreditRequest.CreditRequestStatus;
+import com.bank.credit.domain.models.CreditRequestStatus;
 import com.bank.credit.infrastructure.adapters.IdempotencyHandler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -62,27 +62,52 @@ public class CreditRequestController {
     })
     public Mono<ResponseEntity<CreditRequestResponse>> createCreditRequest(
             @Parameter(description = "Datos de la solicitud de crédito", required = true)
-            @RequestBody CreditRequestDTO request) {
+            @Valid @RequestBody CreditRequestDTO request) {
 
         log.info("Recibida solicitud de crédito: operationNumber={}, channel={}, amount={}",
                 request.operationNumber(), request.channel(), request.requestedAmount());
 
         return processCreditRequestUseCase.execute(
-                        request.customerId(),
-                        request.requestedAmount(),
-                        request.termMonths(),
-                        request.operationNumber(),
-                        request.channel()
+                        new CreditRequest(
+                                java.util.UUID.randomUUID(),
+                                request.customerId(),
+                                request.requestedAmount(),
+                                request.termMonths(),
+                                request.interestRate() != null ? request.interestRate() : new java.math.BigDecimal("15.0"),
+                                "COP",
+                                request.channel(),
+                                request.operationNumber(),
+                                request.operationNumber() + ":" + request.channel(),
+                                com.bank.credit.domain.models.CreditRequestStatus.PENDING,
+                                java.time.LocalDateTime.now(),
+                                null,
+                                null,
+                                request.customerId(),
+                                "Nombre",
+                                "email@test.com",
+                                "1234567890"
+                        )
                 )
-                .map(creditRequest -> {
-                    CreditRequestStatus status = creditRequest.status();
-                    HttpStatus httpStatus = switch (status) {
-                        case APPROVED, PENDING_APPROVAL -> HttpStatus.CREATED;
-                        case REJECTED -> HttpStatus.UNPROCESSABLE_ENTITY;
-                        default -> HttpStatus.INTERNAL_SERVER_ERROR;
+                .map(result -> {
+                    com.bank.credit.application.usecases.ProcessCreditRequestUseCase.ProcessingStatus status = result.status();
+                    org.springframework.http.HttpStatus httpStatus = switch (status) {
+                        case SUCCESS -> org.springframework.http.HttpStatus.CREATED;
+                        case FAILED -> org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY;
+                        case DUPLICATE -> org.springframework.http.HttpStatus.CONFLICT;
+                        case PENDING -> org.springframework.http.HttpStatus.ACCEPTED;
+                        default -> org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
                     };
-                    return ResponseEntity.status(httpStatus)
-                            .body(CreditRequestResponse.fromDomain(creditRequest));
+                    return org.springframework.http.ResponseEntity.status(httpStatus)
+                            .body(new CreditRequestResponse(
+                                result.requestId(),
+                                request.customerId(),
+                                request.requestedAmount(),
+                                request.termMonths(),
+                                status.name(),
+                                result.idempotencyKey(),
+                                result.message(),
+                                java.time.LocalDateTime.now()
+                            ));
                 })
                 .onErrorResume(WebExchangeBindException.class, e -> {
                     log.warn("Error de validación en solicitud: {}", e.getMessage());
@@ -173,10 +198,10 @@ public class CreditRequestController {
         )));
     }
 
-    public record CreditRequestDTO(
-            String customerId,
+    @jakarta.validation.constraints.NotNull public record CreditRequestDTO(
+            @jakarta.validation.constraints.NotBlank String customerId,
             BigDecimal requestedAmount,
-            Integer termMonths,
+            @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Integer termMonths,
             String operationNumber,
             String channel,
             BigDecimal interestRate,
@@ -185,13 +210,13 @@ public class CreditRequestController {
 
     public record CreditRequestResponse(
             UUID id,
-            String customerId,
+            @jakarta.validation.constraints.NotBlank String customerId,
             BigDecimal requestedAmount,
-            Integer termMonths,
+            @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Integer termMonths,
             String status,
             String idempotencyKey,
             String message,
-            LocalDate createdAt
+            java.time.LocalDateTime createdAt
     ) {
         public static CreditRequestResponse fromDomain(CreditRequest creditRequest) {
             return new CreditRequestResponse(

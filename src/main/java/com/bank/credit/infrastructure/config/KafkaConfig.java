@@ -15,11 +15,9 @@ import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
-import reactor.kafka.receiver.KafkaReceiver;
-import reactor.kafka.receiver.ReceiverConfig;
 import reactor.kafka.receiver.ReceiverOptions;
 import reactor.kafka.sender.KafkaSender;
-import reactor.kafka.sender.SenderConfig;
+import reactor.kafka.sender.SenderOptions;
 
 import java.util.HashMap;
 import java.util.List;
@@ -70,7 +68,7 @@ public class KafkaConfig {
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.RETRIES_CONFIG, 3);
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
-        props.put(ProducerConfig.TRANSACTION_TIMEOUT_MS_CONFIG, 30000);
+        props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "tx-");
         return new DefaultKafkaProducerFactory<>(props);
     }
 
@@ -113,8 +111,7 @@ public class KafkaConfig {
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         props.put("retries", 3);
         
-        SenderConfig senderConfig = new SenderConfig(props);
-        return KafkaSender.create(senderConfig);
+        return KafkaSender.create(SenderOptions.create(props));
     }
 
     @Bean
@@ -141,8 +138,7 @@ public class KafkaConfig {
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         
-        SenderConfig senderConfig = new SenderConfig(props);
-        return KafkaSender.create(senderConfig);
+        return KafkaSender.create(SenderOptions.create(props));
     }
 
     @Bean
@@ -154,7 +150,6 @@ public class KafkaConfig {
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         
-        SenderConfig senderConfig = new SenderConfig(props);
-        return KafkaSender.create(senderConfig);
+        return KafkaSender.create(SenderOptions.create(props));
     }
 }

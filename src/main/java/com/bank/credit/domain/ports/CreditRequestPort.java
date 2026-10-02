@@ -39,5 +39,5 @@ public interface CreditRequestPort {
      * @param rejectionReason la razón de rechazo (opcional).
      * @return Mono con la solicitud actualizada.
      */
-    Mono<CreditRequest> updateStatus(UUID id, CreditRequest.CreditRequestStatus status, String rejectionReason);
+    Mono<CreditRequest> updateStatus(UUID id, CreditRequestStatus status, String rejectionReason);
 }

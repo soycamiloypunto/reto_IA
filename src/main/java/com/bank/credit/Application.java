@@ -1,11 +1,12 @@
 package com.bank.credit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.web.reactive.config.EnableWebFlux;
 import reactor.core.publisher.Hooks;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -15,14 +16,14 @@ import io.github.resilience4j.retry.RetryRegistry;
 import java.time.Duration;
 
 @SpringBootApplication
-@EnableWebFlux
+@org.springframework.scheduling.annotation.EnableScheduling
 @EnableAsync
 @ConfigurationPropertiesScan
 public class Application {
 
+    private static final Logger log = LoggerFactory.getLogger(Application.class);
+
     public static void main(String[] args) {
-        // Configuración global de Reactor para mejor manejo de errores
-        Hooks.onOperatorDebug();
         SpringApplication.run(Application.class, args);
     }
 
@@ -33,13 +34,13 @@ public class Application {
                 .onStateTransition(event -> {
                     switch (event.getStateTransition()) {
                         case CLOSED_TO_OPEN:
-                            System.out.println("Circuit breaker opened for credit processing");
+                            log.warn("Circuit breaker opened for credit processing");
                             break;
                         case OPEN_TO_HALF_OPEN:
-                            System.out.println("Circuit breaker half-opened for credit processing");
+                            log.info("Circuit breaker half-opened for credit processing");
                             break;
                         case HALF_OPEN_TO_CLOSED:
-                            System.out.println("Circuit breaker closed for credit processing");
+                            log.info("Circuit breaker closed for credit processing");
                             break;
                         default:
                             break;
@@ -52,9 +53,9 @@ public class Application {
     public Retry coreBankingRetry(RetryRegistry retryRegistry) {
         Retry retry = retryRegistry.retry("coreBanking");
         retry.getEventPublisher()
-                .onRetry(event -> System.out.println("Retry attempt " + event.getNumberOfRetryAttempts() +
+                .onRetry(event -> log.warn("Retry attempt " + event.getNumberOfRetryAttempts() +
                         " for core banking call. Last exception: " + event.getLastThrowable().getMessage()))
-                .onSuccess(event -> System.out.println("Retry succeeded after " +
+                .onSuccess(event -> log.info("Retry succeeded after " +
                         event.getNumberOfRetryAttempts() + " attempts"));
         return retry;
     }
