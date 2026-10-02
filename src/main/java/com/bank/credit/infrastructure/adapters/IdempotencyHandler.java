@@ -2,33 +2,31 @@ package com.bank.credit.infrastructure.adapters;
 
 import com.bank.credit.domain.models.CreditRequest;
 import com.bank.credit.domain.ports.CreditRequestPort;
-import org.redisson.api.RMapCache;
-import org.redisson.api.RedissonClient;
+import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.Optional;
-import java.util.UUID;
 
 @Component
-public class IdempotencyHandler {
+public class IdempotencyHandler implements com.bank.credit.domain.ports.IdempotencyPort {
 
     private static final Logger log = LoggerFactory.getLogger(IdempotencyHandler.class);
     private static final Duration IDEMPOTENCY_TTL = Duration.ofHours(24);
     private static final String IDEMPOTENCY_MAP_NAME = "credit:idempotency:";
 
-    private final RedissonClient redissonClient;
+    private final RedissonReactiveClient redissonClient;
     private final CreditRequestPort creditRequestPort;
 
-    public IdempotencyHandler(RedissonClient redissonClient, CreditRequestPort creditRequestPort) {
+    public IdempotencyHandler(RedissonReactiveClient redissonClient, CreditRequestPort creditRequestPort) {
         this.redissonClient = redissonClient;
         this.creditRequestPort = creditRequestPort;
     }
 
+    @Override
     public Mono<CreditRequest> handleIdempotentOperation(
             String operationNumber, 
             String channel, 
@@ -37,66 +35,28 @@ public class IdempotencyHandler {
         String idempotencyKey = generateIdempotencyKey(operationNumber, channel);
         log.info("Procesando operación idempotente con clave: {}", idempotencyKey);
         
-        return findByIdempotencyKey(idempotencyKey)
-                .flatMap(existing -> {
-                    log.info("Operación previamente procesada, retornando resultado existente para clave: {}", idempotencyKey);
-                    return Mono.just(existing);
-                })
-                .switchIfEmpty(operation
-                        .flatMap(result -> {
-                            result = enrichWithIdempotencyKey(result, idempotencyKey);
-                            return saveWithIdempotencyTracking(result, idempotencyKey);
-                        })
-                );
-    }
-
-    private Mono<CreditRequest> findByIdempotencyKey(String idempotencyKey) {
-        return creditRequestPort.findByIdempotencyKey(idempotencyKey);
-    }
-
-    private Mono<CreditRequest> saveWithIdempotencyTracking(CreditRequest request, String idempotencyKey) {
-        return creditRequestPort.save(request)
-                .flatMap(saved -> {
-                    cacheIdempotencyKey(idempotencyKey, saved.id().toString());
-                    log.info("Operación guardada con clave de idempotencia: {}", idempotencyKey);
-                    return Mono.just(saved);
+        return redissonClient.getBucket(IDEMPOTENCY_MAP_NAME + idempotencyKey)
+                .setIfAbsent("PROCESSING", IDEMPOTENCY_TTL)
+                .flatMap(isNew -> {
+                    if (Boolean.TRUE.equals(isNew)) {
+                        return operation
+                            .map(result -> enrichWithIdempotencyKey(result, idempotencyKey))
+                            .flatMap(result -> creditRequestPort.save(result))
+                            .onErrorResume(Exception.class, e -> {
+                                log.warn("Conflicto de clave duplicada en BD para clave: {}", idempotencyKey);
+                                return creditRequestPort.findByIdempotencyKey(idempotencyKey);
+                            });
+                    } else {
+                        log.info("Operación en progreso o completada, buscando resultado para clave: {}", idempotencyKey);
+                        return creditRequestPort.findByIdempotencyKey(idempotencyKey);
+                    }
                 });
     }
 
-    private void cacheIdempotencyKey(String idempotencyKey, String requestId) {
-        RMapCache<String, String> cache = redissonClient.getMapCache(IDEMPOTENCY_MAP_NAME + idempotencyKey);
-        cache.put("requestId", requestId, IDEMPOTENCY_TTL.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
-        cache.put("createdAt", Instant.now().toString(), IDEMPOTENCY_TTL.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
-        log.debug("Clave de idempotencia {} almacenada en caché con TTL de {} horas", 
-                idempotencyKey, IDEMPOTENCY_TTL.toHours());
-    }
-
-    public Mono<Optional<String>> getCachedRequestId(String operationNumber, String channel) {
-        String idempotencyKey = generateIdempotencyKey(operationNumber, channel);
-        RMapCache<String, String> cache = redissonClient.getMapCache(IDEMPOTENCY_MAP_NAME + idempotencyKey);
-        
-        String requestId = cache.get("requestId");
-        if (requestId != null) {
-            log.info("Cache hit para clave de idempotencia: {}", idempotencyKey);
-            return Mono.just(Optional.of(requestId));
-        }
-        
-        log.debug("Cache miss para clave de idempotencia: {}", idempotencyKey);
-        return Mono.just(Optional.empty());
-    }
-
+    @Override
     public Mono<Boolean> validateIdempotencyKey(String operationNumber, String channel) {
         String idempotencyKey = generateIdempotencyKey(operationNumber, channel);
-        RMapCache<String, String> cache = redissonClient.getMapCache(IDEMPOTENCY_MAP_NAME + idempotencyKey);
-        return Mono.just(cache.containsKey("requestId"));
-    }
-
-    public Mono<Void> invalidateIdempotencyKey(String operationNumber, String channel) {
-        String idempotencyKey = generateIdempotencyKey(operationNumber, channel);
-        RMapCache<String, String> cache = redissonClient.getMapCache(IDEMPOTENCY_MAP_NAME + idempotencyKey);
-        cache.delete();
-        log.info("Clave de idempotencia invalidada: {}", idempotencyKey);
-        return Mono.empty();
+        return redissonClient.getBucket(IDEMPOTENCY_MAP_NAME + idempotencyKey).isExists();
     }
 
     private String generateIdempotencyKey(String operationNumber, String channel) {
@@ -105,26 +65,11 @@ public class IdempotencyHandler {
 
     private CreditRequest enrichWithIdempotencyKey(CreditRequest request, String idempotencyKey) {
         return new CreditRequest(
-                request.id(),
-                request.operationNumber(),
-                request.channel(),
-                request.applicantId(),
-                request.applicantName(),
-                request.applicantEmail(),
-                request.applicantPhone(),
-                request.requestedAmount(),
-                request.termMonths(),
-                request.interestRate(),
-                request.creditType(),
-                request.status(),
-                idempotencyKey,
-                request.requestedAt(),
-                request.processedAt(),
-                request.approvedBy(),
-                request.rejectionReason(),
-                request.antiFraudScore(),
-                request.antiFraudDecision(),
-                request.coreBankingReference()
+                request.id(), request.customerId(), request.requestedAmount(), request.termMonths(),
+                request.interestRate(), request.currency(), request.channel(), request.operationNumber(),
+                idempotencyKey, request.status(), request.createdAt(), request.updatedAt(),
+                request.rejectionReason(), request.applicantId(), request.applicantName(),
+                request.applicantEmail(), request.applicantPhone()
         );
     }
 }

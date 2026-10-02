@@ -120,3 +120,14 @@ logging:
     io.r2dbc.postgresql.PARAM: DEBUG
     org.springframework.kafka: INFO
     reactor.netty.http.client: DEBUG
+
+spring:
+  webflux:
+    problemdetails:
+      enabled: true
+  r2dbc:
+    pool:
+      initial-size: 10
+      max-size: 50
+      max-idle-time: 30m
+      validation-query: "SELECT 1"

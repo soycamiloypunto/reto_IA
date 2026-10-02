@@ -1,6 +1,5 @@
 package com.bank.credit.infrastructure.config;
 
-
 import com.bank.credit.domain.exceptions.AntiFraudValidationException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -31,8 +30,7 @@ public class ResilienceConfig {
                 .automaticTransitionFromOpenToHalfOpenEnabled(true)
                 .recordExceptions(
                         java.io.IOException.class,
-                        java.util.concurrent.TimeoutException.class,
-                        org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable.class
+                        java.util.concurrent.TimeoutException.class
                 )
                 .build();
         return CircuitBreakerRegistry.of(config);
@@ -53,11 +51,10 @@ public class ResilienceConfig {
                 .maxAttempts(3)
                 .waitDuration(Duration.ofMillis(500))
                 .retryExceptions(
-                        java.io.IOException.class,
-                        org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable.class
+                        java.io.IOException.class
                 )
                 .ignoreExceptions(
-                        com.bank.credit.infrastructure.exceptions.AntiFraudValidationException.class
+                        AntiFraudValidationException.class
                 )
                 .build();
         return RetryRegistry.of(config);
@@ -76,15 +73,5 @@ public class ResilienceConfig {
     @Bean
     public Retry antiFraudRetry(RetryRegistry registry) {
         return registry.retry("antiFraudService");
-    }
-
-    @Bean
-    public io.github.resilience4j.reactor.retry.RetryTransformer retryTransformer(Retry retry) {
-        return io.github.resilience4j.reactor.retry.RetryTransformer.of(retry);
-    }
-
-    @Bean
-    public io.github.resilience4j.reactor.circuitbreaker.CircuitBreakerTransformer circuitBreakerTransformer(CircuitBreaker circuitBreaker) {
-        return io.github.resilience4j.reactor.circuitbreaker.CircuitBreakerTransformer.of(circuitBreaker);
     }
 }
