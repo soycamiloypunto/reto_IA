@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: credit_pass_2024
       POSTGRES_HOST_AUTH_METHOD: md5
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -58,9 +58,10 @@ services:
     container_name: credit-kafka
     environment:
       KAFKA_NODE_ID: 1
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -114,7 +115,7 @@ services:
       - "5005:5005"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_R2DBC_URL: r2dbc:pool:postgres://credit_user:credit_pass_2024@postgres:5432/credit_db
+      SPRING_R2DBC_URL: r2dbc:postgresql://credit_user:credit_pass_2024@postgres:5432/credit_db
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092

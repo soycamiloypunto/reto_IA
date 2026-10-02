@@ -1,0 +1,9 @@
+{
+  "customerId": "CLIENT-001",
+  "requestedAmount": 50000.00,
+  "termMonths": 24,
+  "interestRate": 1.5,
+  "currency": "USD",
+  "channel": "WEB",
+  "operationNumber": "OP-12345"
+}

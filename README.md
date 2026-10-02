@@ -135,3 +135,10 @@ mvn clean compile
 ---
 
 *Reto generado automaticamente por Challenge Generator - Pragma*
+
+---
+
+## Nota de Autoría y Uso de IA
+
+Yo realicé toda la implementación de esta solución. Sin embargo, para validar el plan de implementación, el paso a paso y la revisión detallada de cada punto, me apoyé en la inteligencia artificial (Gemini).
+Gemini fue utilizado como mi asistente de validación, diseño y pair programming durante el desarrollo de cada fase de este reto.
